@@ -2,6 +2,9 @@
 * Code reproduction
 * Original paper [Link](https://arxiv.org/pdf/2109.14483.pdf)
 
+## Addition
+foreground segmentation branch
+
 ## Overview
 * Presentate only the experiment on dataset ShanghaiTech Part A (loss: DM-Count)
 * ShanghaiTech Part A 
