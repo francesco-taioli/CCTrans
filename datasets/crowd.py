@@ -8,7 +8,7 @@ from torchvision import transforms
 import random
 import numpy as np
 import scipy.io as sio
-
+from PIL import Image, ImageDraw
 
 def random_crop(im_h, im_w, crop_h, crop_w):
     res_h = im_h - crop_h
@@ -314,6 +314,20 @@ class CustomDataset(Base):
                 annotations.append([x, y])
         return np.array(annotations)
 
+    def foreground_image(self, keypoints, w, h):
+        # FOREGROUND GENERATION BRANCH
+        diameter = 20
+        radius = diameter / 2
+        foreground = Image.new('L', (w, h))
+        draw = ImageDraw.Draw(foreground)
+    
+        for x,y in keypoints:
+            draw.ellipse((x-radius, y-radius, x+radius, y+radius), 'white')
+         
+        foreground = foreground.resize((w // self.d_ratio, h // self.d_ratio),Image.ANTIALIAS)
+        return torch.from_numpy(np.array(foreground) / 255) 
+        
+       
     def train_transform(self, img, keypoints):
         wd, ht = img.size
         st_size = 1.0 * min(wd, ht)
@@ -354,5 +368,7 @@ class CustomDataset(Base):
                 gt_discrete = np.fliplr(gt_discrete)
         gt_discrete = np.expand_dims(gt_discrete, 0)
 
+        foreground_image = self.foreground_image(keypoints, w, h)
+   
         return self.trans(img), torch.from_numpy(keypoints.copy()).float(), torch.from_numpy(
-            gt_discrete.copy()).float()
+            gt_discrete.copy()).float(), foreground_image

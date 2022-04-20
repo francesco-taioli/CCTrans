@@ -3,6 +3,7 @@
 # @time     : 2021/11/12 17:16
 # @File     : ALTGVT.py
 # @Software : PyCharm
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -14,9 +15,29 @@ from timm.models.vision_transformer import _cfg
 from timm.models.vision_transformer import Block as TimmBlock
 from timm.models.vision_transformer import Attention as TimmAttention
 
+class ForegroundSegmentation(nn.Module):
+    def __init__(self):
+        super(ForegroundSegmentation, self).__init__()
+        
+        self.segmentation = nn.Sequential(
+            nn.Conv2d(in_channels=256, out_channels=128, kernel_size=3, padding=1 ),
+            nn.BatchNorm2d(128),
+            nn.ReLU(),
+            nn.Conv2d(128, 64, 3, padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(),
+            nn.Conv2d(64, 1, 1),
+            nn.ReLU()
+        )
+
+    def forward(self, input):
+        return self.segmentation(input)
+         
+
 class Regression(nn.Module):
     def __init__(self):
         super(Regression, self).__init__()
+        self.foreground_seg = ForegroundSegmentation()
 
         self.v1 = nn.Sequential(
             # nn.Upsample(scale_factor=8, mode='bilinear', align_corners=True),
@@ -72,13 +93,18 @@ class Regression(nn.Module):
         x2 = self.v2(x2)
         x3 = self.v3(x3)
         x = x1 + x2 + x3
-        y1 = self.stage1(x)
-        y2 = self.stage2(x)
-        y3 = self.stage3(x)
+
+        foreground = self.foreground_seg(x) 
+        
+        y1 = self.stage1(x) #c1
+        y2 = self.stage2(x) #c2
+        y3 = self.stage3(x) #c3
         y4 = self.stage4(x)
         y = torch.cat((y1,y2,y3), dim=1) + y4
         y = self.res(y)
-        return y
+        y = y * foreground
+
+        return y, foreground # 1/8 of the image size
 
     def init_param(self):
         for m in self.modules():
@@ -482,11 +508,17 @@ class CPVTV2(PyramidVisionTransformer):
 
     def forward(self, x):
         x = self.forward_features(x)
-        mu = self.regression(x[1], x[2], x[3])
+        mu, foreground = self.regression(x[1], x[2], x[3])
+        #B, C, H, W = mu.size()
+        #mu_sum = mu.view([B, -1]).sum(1).unsqueeze(1).unsqueeze(2).unsqueeze(3)
+        #mu_normed = mu / (mu_sum + 1e-6)
+        # return mu
+
+
         B, C, H, W = mu.size()
         mu_sum = mu.view([B, -1]).sum(1).unsqueeze(1).unsqueeze(2).unsqueeze(3)
         mu_normed = mu / (mu_sum + 1e-6)
-        return mu, mu_normed
+        return mu , mu_normed, foreground 
 
 
 class PCPVT(CPVTV2):
@@ -575,6 +607,7 @@ def alt_gvt_large(pretrained=False, **kwargs):
 
 if __name__ == '__main__':
     model = alt_gvt_large(pretrained=True)
-    x = torch.ones(1, 3, 256, 256)
-    mu, mu_norm = model(x)
-    print(mu.size(), mu_norm.size())
+    crops_size = 256
+    x = torch.ones(1, 3, crops_size, crops_size)
+    mu, mu_norm, foreground = model(x)
+    print(mu.size(), mu_norm.size(), foreground.size())
