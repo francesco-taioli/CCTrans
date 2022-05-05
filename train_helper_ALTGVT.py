@@ -25,7 +25,8 @@ def train_collate(batch):
         1
     ]  # the number of points is not fixed, keep it as a list of tensor
     gt_discretes = torch.stack(transposed_batch[2], 0)
-    return images, points, gt_discretes
+    foregrounds = torch.stack(transposed_batch[3], 0)
+    return images, points, gt_discretes, foregrounds
 
 
 class Trainer(object):
@@ -167,6 +168,9 @@ class Trainer(object):
         self.best_mse = np.inf
         # self.best_count = 0
 
+        self.foreground_loss = nn.BCELoss().to(self.device)
+        self.lambda_foreground = 10e-1
+
     def train(self):
         """training process"""
         args = self.args
@@ -185,21 +189,27 @@ class Trainer(object):
         epoch_wd = AverageMeter()
         epoch_count_loss = AverageMeter()
         epoch_tv_loss = AverageMeter()
+        epoch_segmentation_loss = AverageMeter()
         epoch_loss = AverageMeter()
         epoch_mae = AverageMeter()
         epoch_mse = AverageMeter()
         epoch_start = time.time()
         self.model.train()  # Set model to training mode
 
-        for step, (inputs, points, gt_discrete) in enumerate(self.dataloaders["train"]):
+        for step, (inputs, points, gt_discrete, foreground_gt) in enumerate(self.dataloaders["train"]):
             inputs = inputs.to(self.device)
+            foreground_gt = foreground_gt.unsqueeze(1).to(self.device)
             gd_count = np.array([len(p) for p in points], dtype=np.float32)
             points = [p.to(self.device) for p in points]
             gt_discrete = gt_discrete.to(self.device)
             N = inputs.size(0)
 
             with torch.set_grad_enabled(True):
-                outputs, outputs_normed = self.model(inputs)
+                outputs, outputs_normed, output_foreground = self.model(inputs)
+
+                # compute foreground loss
+                foreground_out_loss = self.foreground_loss(output_foreground, foreground_gt)
+
                 # Compute OT loss.
                 ot_loss, wd, ot_obj_value = self.ot_loss(
                     outputs_normed, outputs, points
@@ -235,8 +245,9 @@ class Trainer(object):
                     * torch.from_numpy(gd_count).float().to(self.device)
                 ).mean(0) * self.args.wtv
                 epoch_tv_loss.update(tv_loss.item(), N)
+                epoch_segmentation_loss.update(foreground_out_loss.item(), N)
 
-                loss = ot_loss + count_loss + tv_loss
+                loss = ot_loss + count_loss + tv_loss + self.lambda_foreground * foreground_out_loss
 
                 self.optimizer.zero_grad()
                 loss.backward()
@@ -258,6 +269,7 @@ class Trainer(object):
                         "train/count_loss": count_loss,
                         "train/tv_loss": tv_loss,
                         "train/pred_err": pred_err,
+                        "train/segmentation_loss" : foreground_out_loss
                     },
                     step=self.epoch,
                 )
@@ -318,7 +330,7 @@ class Trainer(object):
                 nz, bz = crop_imgs.size(0), args.batch_size
                 for i in range(0, nz, bz):
                     gs, gt = i, min(nz, i + bz)
-                    crop_pred, _ = self.model(crop_imgs[gs:gt])
+                    crop_pred, _, foreground = self.model(crop_imgs[gs:gt])
 
                     _, _, h1, w1 = crop_pred.size()
                     crop_pred = (
