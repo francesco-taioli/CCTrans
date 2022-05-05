@@ -27,7 +27,7 @@ class ForegroundSegmentation(nn.Module):
             nn.BatchNorm2d(64),
             nn.ReLU(),
             nn.Conv2d(64, 1, 1),
-            nn.ReLU()
+            nn.Sigmoid()
         )
 
     def forward(self, input):
@@ -94,7 +94,9 @@ class Regression(nn.Module):
         x3 = self.v3(x3)
         x = x1 + x2 + x3
 
-        foreground = self.foreground_seg(x) 
+        foreground = self.foreground_seg(x) # torch.Size([4, 1, 32, 32])
+        segmentation = (foreground > 0.5).float() # we segment the foreground from the background
+        
         
         y1 = self.stage1(x) #c1
         y2 = self.stage2(x) #c2
@@ -102,7 +104,7 @@ class Regression(nn.Module):
         y4 = self.stage4(x)
         y = torch.cat((y1,y2,y3), dim=1) + y4
         y = self.res(y)
-        y = y * foreground
+        y = y * segmentation
 
         return y, foreground # 1/8 of the image size
 
