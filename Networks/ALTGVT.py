@@ -97,10 +97,13 @@ class Regression(nn.Module):
         x3 = self.v3(x3)
         x = x1 + x2 + x3
 
-        foreground = self.foreground_seg(x) # torch.Size([4, 1, 32, 32])
-        segmentation = (foreground > 0.5).float() # we segment the foreground from the background
-        #torch.Size([1, 1, 64, 64])
+        foreground = self.foreground_seg(x)
+
+        # we segment the foreground from the background
+        # here we have a crop_size * crop_size image 
+        segmentation = (foreground > 0.5).float() 
         
+       
         y1 = self.stage1(x) #c1
         y2 = self.stage2(x) #c2
         y3 = self.stage3(x) #c3
@@ -112,7 +115,7 @@ class Regression(nn.Module):
 
         y = y * segmentation
 
-        return y, foreground # 1/8 of the image size
+        return y, foreground
 
     def init_param(self):
         for m in self.modules():

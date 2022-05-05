@@ -57,7 +57,7 @@ def vis(args, images_list, model, FP_16=False):
         resized = cv2.resize(np.asarray(image), (512, 512), interpolation=cv2.INTER_LINEAR)
       
         image = transform(resized)
-        print(image.shape)
+        #print(image.shape)
 
         inputs[i, ...] = image
     print(inputs.shape)
@@ -159,10 +159,10 @@ def save_image(pred_map, foreground_map,  gt_count, image_name, save_path, args)
     cv2.rectangle(vis_img, (x, h_image - 50),
                   (x + w, h_image - 1), (0, 0, 0), -1)
 
-    cv2.putText(vis_img, f"Predicted: { round(pred_map.sum())}", (
+    cv2.putText(vis_img, f"Predicted (segm): { round(pred_map.sum())}", (
         x + int(w/10), h_image - 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-    cv2.putText(vis_img, f"GT       : {gt_count}", (x + int(w/10),
-                h_image - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+    # cv2.putText(vis_img, f"GT      : {gt_count}", (x + int(w/10),
+    #             h_image - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
 
     final_path = os.path.join(save_path, image_name)
     #print(f"Saved in {final_path}")
