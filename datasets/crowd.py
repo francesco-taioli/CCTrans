@@ -316,17 +316,27 @@ class CustomDataset(Base):
 
     def foreground_image(self, keypoints, w, h):
         # FOREGROUND GENERATION BRANCH
-        diameter = 20
+        diameter = 15
         radius = diameter / 2
-        foreground = Image.new('L', (w, h))
+        foreground = Image.new('L', (w, h)) #  (8-bit pixels, black and white)
         draw = ImageDraw.Draw(foreground)
     
         for x,y in keypoints:
             draw.ellipse((x-radius, y-radius, x+radius, y+radius), 'white')
-         
-        foreground = foreground.resize((w // self.d_ratio, h // self.d_ratio),Image.ANTIALIAS)
-        return torch.from_numpy(np.array(foreground) / 255) 
         
+        #debug
+        #foreground = np.asarray(foreground)
+        #Image.fromarray(np.uint8(foreground)).save("out.jpg")
+
+        foreground = foreground.resize((w // self.d_ratio, h // self.d_ratio),Image.ANTIALIAS)
+        foreground = np.asarray(foreground) / 255
+        foreground = (foreground > 0.5).astype(np.float32) # to have a 0-1 image
+        
+        return torch.from_numpy(foreground) 
+        
+    def save_image_and_foreground(self, image : Image, foreground):
+        image.resize((32,32)).save("vis/tmp_image.jpg")
+        Image.fromarray(np.uint8(255 * foreground.detach().cpu().numpy())).save("vis/tmp_foreground.jpg")
        
     def train_transform(self, img, keypoints):
         wd, ht = img.size
@@ -369,6 +379,7 @@ class CustomDataset(Base):
         gt_discrete = np.expand_dims(gt_discrete, 0)
 
         foreground_image = self.foreground_image(keypoints, w, h)
-   
+        # Image.fromarray(np.uint8(255 * foreground_image.detach().cpu().numpy())).save("out.jpg")
+        # img.save("img.jpg")
         return self.trans(img), torch.from_numpy(keypoints.copy()).float(), torch.from_numpy(
             gt_discrete.copy()).float(), foreground_image
