@@ -89,18 +89,20 @@ def vis(args, images_list, model, FP_16=False):
         # inference
         print("Inference shape:", crop_imgs.shape)
         start = time.time()
-        crop_pred, _, foreground = model(crop_imgs)
-        # 
+        patch_predictions, _, path_foreground = model(crop_imgs)
+        
         print(Back.GREEN + Fore.RED+ f"Model Inference without pre-post->{time.time() - start}")
         print(Style.RESET_ALL)
 
         crop_reduction = int(args.crop_size / 8) # downsample hyperparams
         # we return to the original patches size
-        patch_predictions = F.interpolate(crop_pred, size=(
-            crop_reduction * 8, crop_reduction * 8), mode='bilinear', align_corners=True) / 64
 
-        path_foreground = F.interpolate(foreground, size=(
-            crop_reduction * 8, crop_reduction * 8), mode='bilinear', align_corners=True) / 64
+
+        # patch_predictions = F.interpolate(crop_pred, size=(
+        #     crop_reduction * 8, crop_reduction * 8), mode='bilinear', align_corners=True) / 64
+
+        # path_foreground = F.interpolate(foreground, size=(
+        #     crop_reduction * 8, crop_reduction * 8), mode='bilinear', align_corners=True) / 64
         
         #Image.fromarray(( foreground[0][0].detach().cpu().numpy() * 255).astype(np.uint8)).save("out.jpg")
 

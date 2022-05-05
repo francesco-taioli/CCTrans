@@ -154,7 +154,7 @@ class Trainer(object):
 
         self.ot_loss = OT_Loss(
             args.crop_size,
-            downsample_ratio,
+            1,# downsample_ratio
             args.norm_cood,
             self.device,
             args.num_of_iter_in_ot,
@@ -333,15 +333,15 @@ class Trainer(object):
                     crop_pred, _, foreground = self.model(crop_imgs[gs:gt])
 
                     _, _, h1, w1 = crop_pred.size()
-                    crop_pred = (
-                        F.interpolate(
-                            crop_pred,
-                            size=(h1 * 8, w1 * 8),
-                            mode="bilinear",
-                            align_corners=True,
-                        )
-                        / 64
-                    )
+                    # crop_pred = (
+                    #     F.interpolate(
+                    #         crop_pred,
+                    #         size=(h1 * 8, w1 * 8),
+                    #         mode="bilinear",
+                    #         align_corners=True,
+                    #     )
+                    #     / 64
+                    # )
 
                     crop_preds.append(crop_pred)
                 crop_preds = torch.cat(crop_preds, dim=0)

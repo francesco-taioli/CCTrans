@@ -20,12 +20,15 @@ class ForegroundSegmentation(nn.Module):
         super(ForegroundSegmentation, self).__init__()
         
         self.segmentation = nn.Sequential(
+            nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True),
             nn.Conv2d(in_channels=256, out_channels=128, kernel_size=3, padding=1 ),
             nn.BatchNorm2d(128),
             nn.ReLU(),
+            nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True),
             nn.Conv2d(128, 64, 3, padding=1),
             nn.BatchNorm2d(64),
             nn.ReLU(),
+            nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True),
             nn.Conv2d(64, 1, 1),
             nn.Sigmoid()
         )
@@ -96,7 +99,7 @@ class Regression(nn.Module):
 
         foreground = self.foreground_seg(x) # torch.Size([4, 1, 32, 32])
         segmentation = (foreground > 0.5).float() # we segment the foreground from the background
-        
+        #torch.Size([1, 1, 64, 64])
         
         y1 = self.stage1(x) #c1
         y2 = self.stage2(x) #c2
@@ -104,6 +107,9 @@ class Regression(nn.Module):
         y4 = self.stage4(x)
         y = torch.cat((y1,y2,y3), dim=1) + y4
         y = self.res(y)
+        # TODO no hardcoded
+        y = F.interpolate(y, size=(256, 256), mode='bilinear', align_corners=True) / 64
+
         y = y * segmentation
 
         return y, foreground # 1/8 of the image size

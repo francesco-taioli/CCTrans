@@ -328,7 +328,7 @@ class CustomDataset(Base):
         #foreground = np.asarray(foreground)
         #Image.fromarray(np.uint8(foreground)).save("out.jpg")
 
-        foreground = foreground.resize((w // self.d_ratio, h // self.d_ratio),Image.ANTIALIAS)
+        #foreground = foreground.resize((w // self.d_ratio, h // self.d_ratio),Image.ANTIALIAS)
         foreground = np.asarray(foreground) / 255
         foreground = (foreground > 0.5).astype(np.float32) # to have a 0-1 image
         
@@ -362,9 +362,9 @@ class CustomDataset(Base):
             keypoints = np.empty([0, 2])
 
         gt_discrete = gen_discrete_map(h, w, keypoints)
-        down_w = w // self.d_ratio
-        down_h = h // self.d_ratio
-        gt_discrete = gt_discrete.reshape([down_h, self.d_ratio, down_w, self.d_ratio]).sum(axis=(1, 3))
+        #down_w = w // self.d_ratio
+        #down_h = h // self.d_ratio
+        #gt_discrete = gt_discrete.reshape([down_h, self.d_ratio, down_w, self.d_ratio]).sum(axis=(1, 3))
         assert np.sum(gt_discrete) == len(keypoints)
 
         if len(keypoints) > 0:
