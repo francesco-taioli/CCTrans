@@ -20,12 +20,25 @@ import wandb
 
 def train_collate(batch):
     transposed_batch = list(zip(*batch))
+
+    num_of_images = len(transposed_batch[0])
+    batch_dimension = 4 * num_of_images # TODO harcoed, fix later 4 because each image generate 4 patches 256x256
+
     images = torch.stack(transposed_batch[0], 0)
-    points = transposed_batch[
+    images = torch.reshape(images, (batch_dimension, 3, 256,256)) # TODO fix dimension
+    points_batch = transposed_batch[
         1
     ]  # the number of points is not fixed, keep it as a list of tensor
+    points = []
+    for b in points_batch:
+        for p in b:
+            points.append(p)
+
     gt_discretes = torch.stack(transposed_batch[2], 0)
+    gt_discretes = torch.reshape(gt_discretes, (batch_dimension, 1, 256,256)) # TODO fix dimension
+    
     foregrounds = torch.stack(transposed_batch[3], 0)
+    foregrounds = torch.reshape(foregrounds, (batch_dimension, 256,256)) # TODO fix dimension
     return images, points, gt_discretes, foregrounds
 
 
@@ -169,7 +182,7 @@ class Trainer(object):
         # self.best_count = 0
 
         self.foreground_loss = nn.BCELoss().to(self.device)
-        self.lambda_foreground = 10e-1
+        self.lambda_foreground = 10e-4 # TODO pass as argument
 
     def train(self):
         """training process"""
@@ -376,7 +389,7 @@ class Trainer(object):
 
         model_state_dic = self.model.state_dict()
         # if (2.0 * mse + mae) < (2.0 * self.best_mse + self.best_mae):
-        print("Comaprison", mae,  self.best_mae)
+        print("Comparison", mae,  self.best_mae)
         if mae < self.best_mae:
             self.best_mse = mse
             self.best_mae = mae

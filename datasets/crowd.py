@@ -337,7 +337,29 @@ class CustomDataset(Base):
     def save_image_and_foreground(self, image : Image, foreground):
         image.resize((32,32)).save("vis/tmp_image.jpg")
         Image.fromarray(np.uint8(255 * foreground.detach().cpu().numpy())).save("vis/tmp_foreground.jpg")
-       
+    
+    def prepare_for_batch(self, img, y, x,  keypoints):
+        w,h = self.c_size, self.c_size
+        if len(keypoints) > 0: 
+            keypoints = keypoints - [x,y]
+            idx_mask = (keypoints[:, 0] >= 0) * (keypoints[:, 0] <= w) * \
+                       (keypoints[:, 1] >= 0) * (keypoints[:, 1] <= h)
+            keypoints = keypoints[idx_mask]
+        else:
+            keypoints = np.empty([0, 2])
+
+        gt_discrete = gen_discrete_map(h, w, keypoints)
+        assert np.sum(gt_discrete) == len(keypoints)
+
+        gt_discrete = np.expand_dims(gt_discrete, 0)
+
+        foreground_image = self.foreground_image(keypoints, w, h)
+        # Image.fromarray(np.uint8(255 * foreground_image.detach().cpu().numpy())).save("out.jpg")
+        # img.save("img.jpg")
+
+        return self.trans(img), torch.from_numpy(keypoints.copy()).float(), torch.from_numpy(
+            gt_discrete.copy()).float(), foreground_image
+
     def train_transform(self, img, keypoints):
         wd, ht = img.size
         st_size = 1.0 * min(wd, ht)
@@ -351,35 +373,25 @@ class CustomDataset(Base):
             keypoints = keypoints * rr
         assert st_size >= self.c_size, print(wd, ht)
         assert len(keypoints) >= 0
-        i, j, h, w = random_crop(ht, wd, self.c_size, self.c_size)
-        img = F.crop(img, i, j, h, w)
-        if len(keypoints) > 0:
-            keypoints = keypoints - [j, i]
-            idx_mask = (keypoints[:, 0] >= 0) * (keypoints[:, 0] <= w) * \
-                       (keypoints[:, 1] >= 0) * (keypoints[:, 1] <= h)
-            keypoints = keypoints[idx_mask]
-        else:
-            keypoints = np.empty([0, 2])
 
-        gt_discrete = gen_discrete_map(h, w, keypoints)
-        #down_w = w // self.d_ratio
-        #down_h = h // self.d_ratio
-        #gt_discrete = gt_discrete.reshape([down_h, self.d_ratio, down_w, self.d_ratio]).sum(axis=(1, 3))
-        assert np.sum(gt_discrete) == len(keypoints)
+        images_patch, keypoints_patch, gt_discrete_patch, foreground_patch = [], [], [], []
+        #i, j, h, w = random_crop(ht, wd, self.c_size, self.c_size)
+        for x in range(0, wd, self.c_size):
+            for y in range(0, ht, self.c_size):
+                # top: int, left: int, height: int, width: int
+                #top (int) – Vertical component of the top left corner of the crop box.
+                #left (int) – Horizontal component of the top left corner of the crop box.\
+                patch = F.crop(img, y, x, self.c_size, self.c_size)
+                # for every image, instead of random crop, we extract all the patches( note! works for square images)
+                img_p, keyp_p, gt_discrete_p, foreground_p = self.prepare_for_batch(patch, y, x, keypoints)
+                images_patch.append(img_p)
+                keypoints_patch.append(keyp_p)
+                gt_discrete_patch.append(gt_discrete_p)
+                foreground_patch.append(foreground_p)
+        
+        images = torch.stack([x for x in images_patch])
 
-        if len(keypoints) > 0:
-            if random.random() > 0.5:
-                img = F.hflip(img)
-                gt_discrete = np.fliplr(gt_discrete)
-                keypoints[:, 0] = w - keypoints[:, 0] - 1
-        else:
-            if random.random() > 0.5:
-                img = F.hflip(img)
-                gt_discrete = np.fliplr(gt_discrete)
-        gt_discrete = np.expand_dims(gt_discrete, 0)
-
-        foreground_image = self.foreground_image(keypoints, w, h)
-        # Image.fromarray(np.uint8(255 * foreground_image.detach().cpu().numpy())).save("out.jpg")
-        # img.save("img.jpg")
-        return self.trans(img), torch.from_numpy(keypoints.copy()).float(), torch.from_numpy(
-            gt_discrete.copy()).float(), foreground_image
+        gt_discrete = torch.stack([x for x in gt_discrete_patch])
+        foreground = torch.stack([x for x in foreground_patch])
+        
+        return images, keypoints_patch, gt_discrete, foreground
