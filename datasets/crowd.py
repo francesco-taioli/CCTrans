@@ -259,7 +259,8 @@ class CustomDataset(Base):
     '''
     def __init__(self, root_path, crop_size,
                  downsample_ratio=8,
-                 method='train'):
+                 method='train',
+                 finetuning=False):
         super().__init__(root_path, crop_size, downsample_ratio)
         self.method = method
         if method not in ['train', 'valid', 'test']:
@@ -276,7 +277,7 @@ class CustomDataset(Base):
                     self.img_to_label[os.path.join(self.root_path, line[0].strip())] = \
                                     os.path.join(self.root_path, line[1].strip())
         self.img_list = sorted(list(self.img_to_label.keys()))
-
+        self.finetuning = finetuning
 
         print('number of img [{}]: {}'.format(method, len(self.img_list)))
 
@@ -291,19 +292,9 @@ class CustomDataset(Base):
         img = Image.open(img_path).convert('RGB')
         keypoints = self.load_head_annotation(gt_path)
        
-        if self.method == 'train':
-            return self.train_transform(img, keypoints)
-        elif self.method == 'valid' or self.method == 'test':
-            wd, ht = img.size
-            st_size = 1.0 * min(wd, ht)
-            if st_size < self.c_size:
-                rr = 1.0 * self.c_size / st_size
-                wd = round(wd * rr)
-                ht = round(ht * rr)
-                st_size = 1.0 * min(wd, ht)
-                img = img.resize((wd, ht), Image.BICUBIC)
-            img = self.trans(img)
-            return img, len(keypoints), img_name
+        return self.get_data(img, keypoints)
+        
+
 
     def load_head_annotation(self, gt_path):
         annotations = []
@@ -316,17 +307,23 @@ class CustomDataset(Base):
 
     def foreground_image(self, keypoints, w, h):
         # FOREGROUND GENERATION BRANCH
-        diameter = 15
-        radius = diameter / 2
+        
         foreground = Image.new('L', (w, h)) #  (8-bit pixels, black and white)
         draw = ImageDraw.Draw(foreground)
     
         for x,y in keypoints:
+            if  0 <= y < 170:
+                diameter = 8
+            elif 170 <= y < 340:
+                diameter = 11
+            else: diameter = 14
+            
+            radius = diameter / 2
             draw.ellipse((x-radius, y-radius, x+radius, y+radius), 'white')
         
         #debug
         #foreground = np.asarray(foreground)
-        #Image.fromarray(np.uint8(foreground)).save("out.jpg")
+        #Image.fromarray(np.uint8(foreground) * 255).save("out.jpg")
 
         #foreground = foreground.resize((w // self.d_ratio, h // self.d_ratio),Image.ANTIALIAS)
         foreground = np.asarray(foreground) / 255
@@ -360,7 +357,21 @@ class CustomDataset(Base):
         return self.trans(img), torch.from_numpy(keypoints.copy()).float(), torch.from_numpy(
             gt_discrete.copy()).float(), foreground_image
 
-    def train_transform(self, img, keypoints):
+    def get_data(self, img, keypoints):
+        """
+        Given an image and its keypoints, it return the patches,
+         the associated keypoints, the gt discrete map and the segmented foregroudn image
+
+        Args:
+            img : image
+            keypoints : list of keypoints (head annotation)
+
+        Returns:
+            images : associated patch to the original image
+            keypoints : associated keypoints for each image
+            gt_discrete : associated gd discrete map for the associated image
+            foreground : associated segmented image for each patch (background vs non background)
+        """
         wd, ht = img.size
         st_size = 1.0 * min(wd, ht)
         # resize the image to fit the crop size
@@ -381,13 +392,24 @@ class CustomDataset(Base):
                 # top: int, left: int, height: int, width: int
                 #top (int) – Vertical component of the top left corner of the crop box.
                 #left (int) – Horizontal component of the top left corner of the crop box.\
-                patch = F.crop(img, y, x, self.c_size, self.c_size)
-                # for every image, instead of random crop, we extract all the patches( note! works for square images)
-                img_p, keyp_p, gt_discrete_p, foreground_p = self.prepare_for_batch(patch, y, x, keypoints)
+
+                if  self.finetuning : # extract all the patches from the image, otherwise random crop
+                    patch = F.crop(img, y, x, self.c_size, self.c_size)
+                    # for every image, instead of random crop, we extract all the patches( note! works for square images)
+                    img_p, keyp_p, gt_discrete_p, foreground_p = self.prepare_for_batch(patch, y, x, keypoints)
+                else:
+                    i, j, h, w = random_crop(ht, wd, self.c_size, self.c_size)
+                    patch = F.crop(img, i, j, self.c_size, self.c_size)
+                    img_p, keyp_p, gt_discrete_p, foreground_p = self.prepare_for_batch(patch, i, j, keypoints)
+                
                 images_patch.append(img_p)
                 keypoints_patch.append(keyp_p)
                 gt_discrete_patch.append(gt_discrete_p)
                 foreground_patch.append(foreground_p)
+
+                if not self.finetuning: break # super ugly
+            if not self.finetuning: break
+               
         
         images = torch.stack([x for x in images_patch])
 
