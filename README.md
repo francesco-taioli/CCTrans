@@ -2,8 +2,9 @@
 * Code reproduction
 * Original paper [Link](https://arxiv.org/pdf/2109.14483.pdf)
 
-## Addition
-foreground segmentation branch
+## News from this branch [WIP]
+Take a look at this paper: [Understanding the impact of mistakes on background regions in crowd counting](https://arxiv.org/abs/2003.13759).
+In order to reduce the false positive rate on the background, I implemented and tested a new head that performed segmentation between foreground and background.
 
 ## Overview
 * Presentate only the experiment on dataset ShanghaiTech Part A (loss: DM-Count)
