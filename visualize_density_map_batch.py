@@ -26,7 +26,7 @@ def load_model(args, FP_16=False):
     os.environ['CUDA_VISIBLE_DEVICES'] = args.device
     device = torch.device('cuda')
 
-    model = ALTGVT.alt_gvt_large(pretrained=False)
+    model = ALTGVT.alt_gvt_large(pretrained=False, img_size=256)
     model.to(device)
     model.load_state_dict(torch.load(args.weight_path, device))
     model.eval()
