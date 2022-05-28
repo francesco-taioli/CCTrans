@@ -32,6 +32,7 @@ def parse_args():
                         help='the crop size of the train image')
     parser.add_argument('--wot', type=float, default=0.1, help='weight on OT loss')
     parser.add_argument('--wtv', type=float, default=0.01, help='weight on TV loss')
+    parser.add_argument('--lambda-segmentation', type=float, default=0.001, help='weight on segmentation loss')
     parser.add_argument('--reg', type=float, default=10.0,
                         help='entropy regularization in sinkhorn')
     parser.add_argument('--num-of-iter-in-ot', type=int, default=100,
@@ -40,6 +41,8 @@ def parse_args():
 
     parser.add_argument('--run-name', default='CCTrans', help='run name for wandb interface/logging')
     parser.add_argument('--wandb', default=0, type=int, help='boolean to set wandb logging')
+    parser.add_argument('--finetuning', default=0, type=int, help='boolean to set finetune training - if true we extract all the patches from the image')
+    
     
     args = parser.parse_args()
 
