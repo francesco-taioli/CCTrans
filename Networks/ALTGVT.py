@@ -21,15 +21,15 @@ class ForegroundSegmentation(nn.Module):
         
         self.segmentation = nn.Sequential(
             nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True),
-            nn.Conv2d(in_channels=256, out_channels=128, kernel_size=3, padding=1 ),
-            nn.BatchNorm2d(128),
+            nn.Conv2d(in_channels=256, out_channels=140, kernel_size=3, padding=1 ),
+            nn.BatchNorm2d(140),
             nn.ReLU(),
             nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True),
-            nn.Conv2d(128, 64, 3, padding=1),
-            nn.BatchNorm2d(64),
+            nn.Conv2d(in_channels=140, out_channels=80, kernel_size=2, padding=1, dilation=2),
+            nn.BatchNorm2d(80),
             nn.ReLU(),
             nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True),
-            nn.Conv2d(64, 1, 1),
+            nn.Conv2d(80, 1, 1),
             nn.Sigmoid()
         )
 
@@ -95,6 +95,7 @@ class Regression(nn.Module):
         x1 = self.v1(x1)
         x2 = self.v2(x2)
         x3 = self.v3(x3)
+
         x = x1 + x2 + x3
 
         foreground = self.foreground_seg(x)
@@ -314,6 +315,8 @@ class PatchEmbed(nn.Module):
             f"img_size {img_size} should be divided by patch_size {patch_size}."
         self.H, self.W = img_size[0] // patch_size[0], img_size[1] // patch_size[1]
         self.num_patches = self.H * self.W
+
+        
         self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=patch_size)
         self.norm = nn.LayerNorm(embed_dim)
 
@@ -348,10 +351,10 @@ class PyramidVisionTransformer(nn.Module):
                 self.patch_embeds.append(PatchEmbed(img_size, patch_size, in_chans, embed_dims[i]))
             else:
                 self.patch_embeds.append(
-                    PatchEmbed(img_size // patch_size // 2 ** (i - 1), 2, embed_dims[i - 1], embed_dims[i]))
+                    PatchEmbed(img_size // patch_size // 2 ** (i - 1), patch_size=2, in_chans=embed_dims[i - 1], embed_dim=embed_dims[i]))
             patch_num = self.patch_embeds[-1].num_patches + 1 if i == len(embed_dims) - 1 else self.patch_embeds[
                 -1].num_patches
-            self.pos_embeds.append(nn.Parameter(torch.zeros(1, patch_num, embed_dims[i])))
+            self.pos_embeds.append(nn.Parameter(torch.zeros(1, patch_num, embed_dims[i]))) # patch_num = number of total patch in the last pos_embeded
             self.pos_drops.append(nn.Dropout(p=drop_rate))
 
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, sum(depths))]  # stochastic depth decay rule
@@ -519,6 +522,20 @@ class CPVTV2(PyramidVisionTransformer):
 
     def forward(self, x):
         x = self.forward_features(x)
+        # x[0].shape
+        # torch.Size([4, 128, 64, 64])
+        
+        #x[1].shape
+        #torch.Size([4, 256, 32, 32])
+        
+        #x[2].shape
+        #torch.Size([4, 512, 16, 16])
+
+        #x[3].shape
+        #torch.Size([4, 1024, 8, 8])
+        
+        # the channel i is equivalent to embed_dims=[128, 256, 512, 1024] at pos i
+        # we take the 1/8, 1/16 and 1/32 parts of the original image (pyramid features)
         mu, foreground = self.regression(x[1], x[2], x[3])
         #B, C, H, W = mu.size()
         #mu_sum = mu.view([B, -1]).sum(1).unsqueeze(1).unsqueeze(2).unsqueeze(3)
